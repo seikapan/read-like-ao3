@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Read like AO3</title>
+<style>
+:root{--sans:"Lucida Sans","Lucida Sans Unicode","Lucida Grande","GNU Unifont",Verdana,"DejaVu Sans",Helvetica,sans-serif;--bg:#fff;--fg:#2a2a2a;--link:#00476b;--accent:#900;--muted:#666;--card:#f3f3f3;--rule:#2a2a2a;--fs:19px;--w:1100px;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1b1b1b;--fg:#e6e6e6;--link:#7fc4e8;--accent:#c33;--muted:#aaa;--card:#2a2a2a;--rule:#ccc;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#1b1b1b;--fg:#e6e6e6;--link:#7fc4e8;--accent:#c33;--muted:#aaa;--card:#2a2a2a;--rule:#ccc;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+html>body{margin:0;background:var(--bg);color:var(--fg);font-family:Georgia,"Times New Roman",serif}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--accent);z-index:10}
+header{background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 20px;position:sticky;top:env(safe-area-inset-top,0px);z-index:11;flex-wrap:wrap}
+header h1{font-size:1.2rem;margin:0;font-weight:normal;letter-spacing:.5px}
+.tools{display:flex;gap:6px;align-items:center}
+.tools button{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.5);color:#fff;border-radius:4px;padding:4px 10px;font:inherit;font-size:.9rem;cursor:pointer}
+.tools button:hover{background:rgba(255,255,255,.3)}
+main{max-width:var(--w);margin:0 auto;padding:24px 16px 80px}
+#drop{border:2px dashed var(--muted);border-radius:8px;padding:48px 20px;text-align:center;max-width:640px;margin:40px auto;cursor:pointer}
+#drop.over{background:var(--card);border-color:var(--accent)}
+#drop p{color:var(--muted);margin:.4em 0}
+#drop strong{font-size:1.2rem}
+#err{color:var(--accent);text-align:center;min-height:1.4em}
+#reader{display:none}
+.work-head{text-align:center;margin-bottom:24px}
+.work-head h2{font-size:1.9rem;margin:.2em 0}
+.work-head .by{color:var(--muted)}
+.meta{font-family:var(--sans);background:var(--card);border-radius:6px;padding:12px 18px;margin:0 auto 28px;max-width:var(--w);font-size:.95rem}
+.meta blockquote{margin:.2em 0 0 1em}.meta p{margin:.4em 0}.meta dl{margin:0}.meta dt{font-weight:bold;margin-top:.5em}.meta dd{margin:0 0 0 1em}
+.jump{display:flex;justify-content:center;margin-bottom:20px}
+.jump select{font:inherit;padding:4px 8px;background:var(--card);color:var(--fg);border:1px solid var(--muted);border-radius:4px;max-width:100%}
+.chapter{margin-bottom:40px}
+.chapter>hr,hr.top{border:0;border-top:1px solid var(--rule);margin:30px 0 20px}
+.chapter h1,.chapter h2,.chapter h3,.ch-title{text-align:center;font-weight:normal;font-size:1.6rem;margin:0 0 28px}
+.chapter h1 *,.chapter h2 *,.chapter h3 *{font:inherit}
+.chapter h1,.chapter h2,.chapter h3{color:var(--link);text-decoration:underline;text-underline-offset:4px}
+.userstuff{font-family:var(--sans);font-size:var(--fs);line-height:1.85}
+.userstuff p{margin:0 0 1.15em}
+.userstuff blockquote{border-left:3px solid var(--muted);margin:1em 0;padding-left:1em}
+.userstuff a{color:var(--link)}
+.userstuff hr{border:0;border-top:1px solid var(--muted);margin:1.8em 0}
+.userstuff.serif{font-family:Georgia,"Times New Roman",serif}
+@media (max-width:700px){:root{--fs:19px}.userstuff{line-height:1.75}header{padding:8px 12px}main{padding:16px 12px 60px}.chapter h2,.ch-title{font-size:1.5rem}}
+#busy{display:none;text-align:center;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Fic Reader</h1>
+  <div class="tools">
+    <button id="smaller" title="Smaller text">A−</button>
+    <button id="bigger" title="Larger text">A+</button>
+    <button id="font" title="Switch font">Font</button>
+    <button id="theme" title="Light/dark">Theme</button>
+    <button id="again" style="display:none">Upload another</button>
+  </div>
+</header>
+<main>
+  <section id="upload">
+    <div id="drop" tabindex="0">
+      <strong>Drop an AO3 download here</strong>
+      <p>or click to choose an EPUB or PDF file</p>
+      <p>Everything is processed in your browser. Nothing is uploaded to a server.</p>
+      <input id="file" type="file" accept=".epub,.pdf,application/epub+zip,application/pdf" hidden>
+    </div>
+    <div id="err"></div>
+    <div id="busy">Reading your fic…</div>
+  </section>
+  <article id="reader"></article>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const store = {
+  get(k){try{return localStorage.getItem(k)}catch(e){return null}},
+  set(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+};
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let fs = parseInt(store.get('fs')) || 19;
+const root = document.documentElement;
+function applyFs(){ root.style.setProperty('--fs', fs + 'px'); store.set('fs', fs); }
+applyFs();
+const savedTheme = store.get('theme'); if (savedTheme) root.dataset.theme = savedTheme;
+$('#smaller').onclick = () => { fs = Math.max(13, fs - 1); applyFs(); };
+$('#bigger').onclick = () => { fs = Math.min(32, fs + 1); applyFs(); };
+$('#font').onclick = () => document.querySelectorAll('.userstuff').forEach(e => e.classList.toggle('serif'));
+$('#theme').onclick = () => {
+  const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  root.dataset.theme = dark ? 'light' : 'dark'; store.set('theme', root.dataset.theme);
+};
+
+const drop = $('#drop'), input = $('#file');
+drop.onclick = () => input.click();
+drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') input.click(); };
+input.onchange = () => input.files[0] && handle(input.files[0]);
+['dragover','dragenter'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) handle(f); });
+$('#again').onclick = () => {
+  $('#reader').style.display = 'none'; $('#reader').innerHTML = '';
+  $('#upload').style.display = ''; $('#again').style.display = 'none'; input.value = '';
+};
+
+async function handle(file){
+  $('#err').textContent = ''; $('#busy').style.display = 'block';
+  try {
+    const name = file.name.toLowerCase();
+    let work;
+    if (name.endsWith('.epub')) work = await readEpub(file);
+    else if (name.endsWith('.pdf')) work = await readPdf(file);
+    else throw new Error('Please choose an EPUB or PDF file.');
+    render(work);
+  } catch (e) {
+    console.error(e);
+    $('#err').textContent = 'Sorry, that file couldn’t be read. ' + (e.message || '');
+  } finally { $('#busy').style.display = 'none'; }
+}
+
+function clean(node){
+  const c = node.cloneNode(true);
+  c.querySelectorAll('script,style,link,img,svg,iframe,form,object,embed,nav').forEach(n => n.remove());
+  c.querySelectorAll('*').forEach(el => {
+    const href = el.tagName === 'A' ? el.getAttribute('href') : null;
+    [...el.attributes].forEach(a => el.removeAttribute(a.name));
+    if (href && /^https?:/i.test(href)) { el.setAttribute('href', href); el.setAttribute('target', '_blank'); el.setAttribute('rel', 'noopener noreferrer'); }
+  });
+  const wrap = document.createElement('div');
+  while (c.firstChild) wrap.appendChild(c.firstChild);
+  return wrap;
+}
+
+async function readEpub(file){
+  const zip = await JSZip.loadAsync(file);
+  const text = async p => { const f = zip.file(p); if (!f) throw new Error('Missing ' + p); return f.async('string'); };
+  const xml = s => new DOMParser().parseFromString(s, 'application/xml');
+  const container = xml(await text('META-INF/container.xml'));
+  const opfPath = container.querySelector('rootfile').getAttribute('full-path');
+  const opf = xml(await text(opfPath));
+  const base = opfPath.includes('/') ? opfPath.replace(/[^/]*$/, '') : '';
+  const manifest = {};
+  opf.querySelectorAll('manifest > item').forEach(i => manifest[i.getAttribute('id')] = i);
+  const dc = n => (opf.getElementsByTagNameNS('*', n)[0] || {}).textContent || '';
+  const work = { title: dc('title') || 'Untitled', author: dc('creator'), meta: null, chapters: [] };
+
+  for (const ref of opf.querySelectorAll('spine > itemref')) {
+    const item = manifest[ref.getAttribute('idref')];
+    if (!item) continue;
+    const href = decodeURIComponent(item.getAttribute('href'));
+    if (/nav|toc/i.test(item.getAttribute('properties') || '') || /(^|\/)(nav|toc)[^/]*$/i.test(href)) continue;
+    const f = zip.file(base + href) || zip.file(href);
+    if (!f) continue;
+    const doc = new DOMParser().parseFromString(await f.async('string'), 'text/html');
+    const body = clean(doc.body);
+    if (!body.textContent.trim()) continue;
+    const isPreface = /preface/i.test(href) || doc.querySelector('dl.tags, .meta.group, dl.meta');
+    if (isPreface && !work.meta) { work.meta = body; continue; }
+    work.chapters.push({ html: body });
+  }
+  if (!work.chapters.length) throw new Error('No readable chapters were found.');
+  return work;
+}
+
+const LABEL_RE = /^(Rating|Archive Warnings?|Categor(?:y|ies)|Fandoms?|Relationships?|Characters?|Additional Tags|Language|Series|Collections?|Stats|Published|Updated|Completed|Words|Chapters|Summary|Notes)\s*:\s*(.*)$/i;
+const BARE_RE = /^(Summary|Notes)\s*$/i;
+const mergeSegs = a => { const out = []; a.forEach(s => { const l = out[out.length - 1]; if (l && l.i === s.i && l.b === s.b) l.s += s.s; else out.push({ ...s }); }); return out; };
+const segText = a => a.map(s => s.s).join('');
+const endsSentence = s => /[.!?…:;)\]*—–"”’'~-]\s*$/.test(s);
+
+function findRules(op, view){
+  const O = pdfjsLib.OPS, W = view[2] - view[0], ys = [];
+  let m = [1,0,0,1,0,0]; const stack = [];
+  const mul = (a, b) => [a[0]*b[0]+a[2]*b[1], a[1]*b[0]+a[3]*b[1], a[0]*b[2]+a[2]*b[3], a[1]*b[2]+a[3]*b[3], a[0]*b[4]+a[2]*b[5]+a[4], a[1]*b[4]+a[3]*b[5]+a[5]];
+  for (let i = 0; i < op.fnArray.length; i++) {
+    const f = op.fnArray[i], a = op.argsArray[i];
+    if (f === O.save) stack.push(m.slice());
+    else if (f === O.restore) { if (stack.length) m = stack.pop(); }
+    else if (f === O.transform) m = mul(m, a);
+    else if (f === O.constructPath) {
+      const ops = a[0], c = a[1]; let ci = 0, px = 0, py = 0;
+      for (const o of ops) {
+        if (o === O.moveTo) { px = c[ci++]; py = c[ci++]; }
+        else if (o === O.lineTo) {
+          const x = c[ci++], y = c[ci++];
+          if (Math.abs(y - py) < 1.5 && Math.abs(x - px) * Math.abs(m[0]) > W * .3) ys.push(m[1]*x + m[3]*y + m[5]);
+          px = x; py = y;
+        }
+        else if (o === O.rectangle) {
+          const x = c[ci++], y = c[ci++], w = c[ci++], h = c[ci++];
+          if (Math.abs(h * m[3]) < 3 && Math.abs(w * m[0]) > W * .3) ys.push(m[1]*x + m[3]*(y + h/2) + m[5]);
+        }
+        else if (o === O.curveTo) ci += 6;
+        else if (o === O.curveTo2 || o === O.curveTo3) ci += 4;
+      }
+    }
+  }
+  return ys;
+}
+
+async function readPdf(file){
+  const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+  let info = {}; try { info = (await pdf.getMetadata()).info || {}; } catch(e) {}
+  const pages = []; let chars = 0, ital = 0, bold = 0;
+
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    let opList = null;
+    try { opList = await page.getOperatorList(); } catch(e) {}
+    let rules = []; try { rules = opList ? findRules(opList, page.view) : []; } catch(e) {}
+    const content = await page.getTextContent();
+    const cache = {};
+    const styleOf = name => {
+      if (cache[name]) return cache[name];
+      let r = { i: false, b: false };
+      try { if (page.commonObjs.has(name)) { const f = page.commonObjs.get(name), n = String(f.name || '');
+        r = { i: !!f.italic || /italic|oblique/i.test(n), b: !!f.bold || /bold|heavy/i.test(n) }; } } catch(e) {}
+      return cache[name] = r;
+    };
+    const rows = [];
+    content.items.forEach(it => {
+      if (!it.str) return;
+      const y = it.transform[5], x = it.transform[4], st = styleOf(it.fontName);
+      let row = rows.find(r => Math.abs(r.y - y) < 2.5);
+      if (!row) rows.push(row = { y, parts: [] });
+      row.parts.push({ x, s: it.str, i: st.i, b: st.b });
+    });
+    rows.sort((a, b) => b.y - a.y);
+    const lines = [];
+    rows.forEach(r => {
+      let segs = mergeSegs(r.parts.sort((a, b) => a.x - b.x).map(q => ({ s: q.s.replace(/\s+/g, ' '), i: q.i, b: q.b })));
+      if (!segs.length) return;
+      segs[0].s = segs[0].s.replace(/^\s+/, ''); segs[segs.length - 1].s = segs[segs.length - 1].s.replace(/\s+$/, '');
+      segs = segs.filter(s => s.s);
+      if (!segs.length) return;
+      segs.forEach(s => { const n = s.s.length; chars += n; if (s.i) ital += n; if (s.b) bold += n; });
+      lines.push({ segs, t: segText(segs), y: r.y });
+    });
+    const gaps = lines.slice(1).map((l, i) => lines[i].y - l.y).sort((a, b) => a - b);
+    const med = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 14;
+    lines.forEach((l, i) => { l.br = i === 0 ? 'page' : (lines[i - 1].y - l.y > med * 1.45); });
+    const merged = [];
+    const rl = rules.slice().sort((a, b) => b - a).filter((y, i, arr) => i === 0 || arr[i - 1] - y > 3);
+    let ri = 0;
+    lines.forEach(l => {
+      while (ri < rl.length && rl[ri] > l.y) { merged.push({ rule: true, y: rl[ri], segs: [], t: '' }); ri++; }
+      if (merged.length && merged[merged.length - 1].rule) l.br = true;
+      merged.push(l);
+    });
+    while (ri < rl.length) merged.push({ rule: true, y: rl[ri++], segs: [], t: '' });
+    pages.push(merged);
+  }
+  // if a style covers nearly everything, the detection is unreliable: drop it
+  const dropI = chars && ital / chars > .6, dropB = chars && bold / chars > .6;
+  pages.forEach(pg => pg.forEach(l => { (l.segs || []).forEach(s => { if (dropI) s.i = false; if (dropB) s.b = false; }); }));
+
+  const norm = t => t.replace(/\d+/g, '#').toLowerCase();
+  const counts = {};
+  const edges = pg => { const tl = pg.filter(l => !l.rule); return [tl[0], tl[tl.length - 1]]; };
+  pages.forEach(pg => edges(pg).forEach(l => { if (l) counts[norm(l.t)] = (counts[norm(l.t)] || 0) + 1; }));
+  const lines = [];
+  pages.forEach(pg => {
+    const [fi, la] = edges(pg);
+    pg.forEach(l => {
+      if (!l.rule && (l === fi || l === la) && pages.length >= 3 && (counts[norm(l.t)] >= 3 || /^\d{1,4}$/.test(l.t) || /^page \d+( of \d+)?$/i.test(l.t))) l.drop = true;
+    });
+    const startIdx = lines.length;
+    pg.forEach((l, i) => {
+      if (l.drop) return;
+      if (l.rule) {
+        const before = pg.slice(0, i), after = pg.slice(i + 1);
+        const noKeptBefore = !before.some(x => !x.rule && !x.drop), noKeptAfter = !after.some(x => !x.rule && !x.drop);
+        if ((noKeptBefore && before.some(x => x.drop)) || (noKeptAfter && after.some(x => x.drop))) return;
+      }
+      lines.push(l);
+    });
+    const k = lines[startIdx]; if (k && !k.rule) k.br = 'page';
+  });
+  if (!lines.length) throw new Error('This PDF has no selectable text (it may be scanned).');
+
+  let hEnd = lines.findIndex((l, i) => i < 200 && (/^chapter\s+\d+/i.test(l.t) && l.t.length < 90 || /^Work Text:?$/i.test(l.t)));
+  let start = 0, meta = null, preTitle = [];
+  if (hEnd > 0 && lines.slice(0, hEnd).some(l => LABEL_RE.test(l.t))) {
+    const fields = []; let cur = null;
+    lines.slice(0, hEnd).forEach(l => {
+      if (l.rule || /Posted originally|^https?:\/\//i.test(l.t)) return;
+      const m = l.t.match(LABEL_RE) || l.t.match(BARE_RE);
+      if (m) {
+        const k = m[1].replace(/\b\w/g, c => c.toUpperCase());
+        cur = { k, v: [m[2] || ''] }; fields.push(cur);
+      } else if (cur) {
+        if (l.br === true) cur.v.push('');
+        const last = cur.v.length - 1; cur.v[last] += (cur.v[last] ? ' ' : '') + l.t;
+      } else preTitle.push(l.t);
+    });
+    start = /^Work Text/i.test(lines[hEnd].t) ? hEnd + 1 : hEnd;
+    if (fields.length) {
+      meta = document.createElement('div');
+      const dl = document.createElement('dl');
+      fields.filter(f => !/^(Summary|Notes)$/.test(f.k)).forEach(f => {
+        const dt = document.createElement('dt'), dd = document.createElement('dd');
+        dt.textContent = f.k + ':'; dd.textContent = f.v.join(' ').trim(); dl.append(dt, dd);
+      });
+      if (dl.children.length) meta.appendChild(dl);
+      fields.filter(f => /^(Summary|Notes)$/.test(f.k)).forEach(f => {
+        const h = document.createElement('p'); h.innerHTML = '<strong></strong>'; h.firstChild.textContent = f.k + ':'; h.style.margin = '1em 0 .2em'; meta.appendChild(h);
+        const bq = document.createElement('blockquote');
+        f.v.filter(x => x.trim()).forEach(x => { const p = document.createElement('p'); p.textContent = x; bq.appendChild(p); });
+        meta.appendChild(bq);
+      });
+    }
+  }
+  const by = preTitle.find(t => /^by\s/i.test(t));
+  const title = info.Title || preTitle.find(t => t !== by) || file.name.replace(/\.pdf$/i, '');
+  const author = info.Author || (by ? by.replace(/^by\s+/i, '') : (preTitle.filter(t => t !== title)[0] || ''));
+
+  const chapters = []; let section = null, cur = [];
+  const ensure = () => { if (!section) { section = { heading: null, nodes: [] }; chapters.push(section); } };
+  const flush = () => {
+    if (!cur.length) return; ensure();
+    const t = segText(cur).trim();
+    if (/^[\s*~\-–—_=#•.·]{3,}$/.test(t)) section.nodes.push(document.createElement('hr'));
+    else if (t) {
+      const el = document.createElement('p');
+      cur.forEach(s => { let n = document.createTextNode(s.s);
+        if (s.i) { const e = document.createElement('em'); e.appendChild(n); n = e; }
+        if (s.b) { const e = document.createElement('strong'); e.appendChild(n); n = e; }
+        el.appendChild(n); });
+      section.nodes.push(el);
+    }
+    cur = [];
+  };
+  lines.slice(start).forEach((l, idx) => {
+    if (l.rule) {
+      flush(); ensure();
+      const last = section.nodes[section.nodes.length - 1];
+      if (last && last.tagName !== 'HR') section.nodes.push(document.createElement('hr'));
+      return;
+    }
+    if (/^Chapter Text:?$/i.test(l.t)) return;
+    if (/^chapter\s+\d+/i.test(l.t) && l.t.length < 90) { flush(); section = { heading: l.t, nodes: [] }; chapters.push(section); return; }
+    const isNewPara = l.br === true || (l.br === 'page' && (!cur.length || endsSentence(segText(cur))));
+    if (isNewPara) flush();
+    if (!cur.length) cur = l.segs.map(s => ({ ...s }));
+    else {
+      const last = cur[cur.length - 1], first = l.segs[0];
+      if (/[a-z]-$/.test(last.s) && /^[a-z]/.test(first.s)) last.s = last.s.slice(0, -1); else last.s += ' ';
+      cur = mergeSegs(cur.concat(l.segs.map(s => ({ ...s }))));
+    }
+  });
+  flush();
+  if (!chapters.length) throw new Error('No readable text was found.');
+  return { title, author, meta, chapters: chapters.map(c => {
+    const d = document.createElement('div'); c.nodes.forEach(n => d.appendChild(n));
+    if (c.heading) { const h = document.createElement('h2'); h.textContent = c.heading; d.prepend(h); }
+    return { html: d };
+  }) };
+}
+
+function render(work){
+  const r = $('#reader'); r.innerHTML = '';
+  document.title = work.title + ' – Fic Reader';
+  const head = document.createElement('div'); head.className = 'work-head';
+  const h = document.createElement('h2'); h.textContent = work.title; head.appendChild(h);
+  if (work.author) { const by = document.createElement('div'); by.className = 'by'; by.textContent = 'by ' + work.author; head.appendChild(by); }
+  r.appendChild(head);
+
+  if (work.meta) {
+    const m = document.createElement('div'); m.className = 'meta';
+    m.appendChild(work.meta); r.appendChild(m);
+  }
+
+  const heads = [];
+  work.chapters.forEach((ch, i) => {
+    const sec = document.createElement('section'); sec.className = 'chapter'; sec.id = 'ch' + (i + 1);
+    sec.appendChild(document.createElement('hr'));
+    let title = ch.html.querySelector('h1,h2,h3');
+    if (!title && work.chapters.length > 1) {
+      title = document.createElement('h2'); title.textContent = 'Chapter ' + (i + 1); sec.appendChild(title);
+    } else if (title) { title.remove(); title.textContent = title.textContent.trim(); sec.appendChild(title); }
+    heads.push(title ? title.textContent : 'Section ' + (i + 1));
+    const body = document.createElement('div'); body.className = 'userstuff';
+    body.appendChild(ch.html); sec.appendChild(body); r.appendChild(sec);
+  });
+
+  if (work.chapters.length > 1) {
+    const j = document.createElement('div'); j.className = 'jump';
+    const sel = document.createElement('select');
+    sel.innerHTML = '<option value="">Jump to chapter…</option>';
+    heads.forEach((t, i) => { const o = document.createElement('option'); o.value = 'ch' + (i + 1); o.textContent = t; sel.appendChild(o); });
+    sel.onchange = () => { if (sel.value) document.getElementById(sel.value).scrollIntoView({ behavior: 'smooth' }); };
+    j.appendChild(sel); head.after(j);
+  }
+  $('#upload').style.display = 'none'; r.style.display = 'block'; $('#again').style.display = '';
+  window.scrollTo(0, 0);
+}
+</script>
+</body>
+</html>
